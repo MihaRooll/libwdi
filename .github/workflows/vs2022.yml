@@ -1,7 +1,6 @@
 name: VS2022
 
 on:
-  workflow_dispatch:
   push:
     paths-ignore:
       - '.gitignore'
