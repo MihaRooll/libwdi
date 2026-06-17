@@ -16,29 +16,42 @@ env:
   LIBUSB0_URL: https://github.com/mcuee/libusb-win32/releases/download/release_1.4.0.0/libusb-win32-bin-1.4.0.0.zip
   LIBUSBK_URL: https://github.com/mcuee/libusbk/releases/download/V3.1.0.0/libusbK-3.1.0.0-bin.7z
   SOLUTION_FILE_PATH: ./libwdi.sln
-  EMAIL: pete@akeo.ie
+  COVERITY_SCAN_PROJECT: MihaRooll/libwdi
   BUILD_MACROS: '"WDK_DIR=\"../wdk/Windows Kits/8.0\";LIBUSB0_DIR=\"../libusb0\";LIBUSBK_DIR=\"../libusbk/bin\""'
 
 jobs:
   Coverity-Build:
-    runs-on: windows-latest
+    runs-on: windows-2022
+    env:
+      COVERITY_SCAN_EMAIL: ${{ secrets.COVERITY_SCAN_EMAIL }}
+      COVERITY_SCAN_TOKEN: ${{ secrets.COVERITY_SCAN_TOKEN }}
 
     steps:
     - name: Checkout repository
-      uses: actions/checkout@v4
+      uses: actions/checkout@v6
       with:
         fetch-depth: 0
         submodules: recursive
+
+    - name: Skip Coverity without credentials
+      if: ${{ env.COVERITY_SCAN_TOKEN == '' || env.COVERITY_SCAN_EMAIL == '' }}
+      run: echo "COVERITY_SCAN_TOKEN or COVERITY_SCAN_EMAIL is not configured; skipping Coverity Scan upload."
+
     - name: Download Coverity
+      if: ${{ env.COVERITY_SCAN_TOKEN != '' && env.COVERITY_SCAN_EMAIL != '' }}
       run: |
-        curl -d "token=${{ secrets.COVERITY_SCAN_TOKEN }}&project=pbatard%2Flibwdi" -L https://scan.coverity.com/download/cxx/win64 -o cov-analysis-win64.zip
+        curl.exe --fail --show-error --location --data-urlencode "token=${{ env.COVERITY_SCAN_TOKEN }}" --data-urlencode "project=${{ env.COVERITY_SCAN_PROJECT }}" https://scan.coverity.com/download/cxx/win64 --output cov-analysis-win64.zip
         7z x cov-analysis-win64.zip
         del cov-analysis-win64.zip
         move cov-analysis-win64* cov-analysis-win64
+
     - name: Add Coverity to PATH
+      if: ${{ env.COVERITY_SCAN_TOKEN != '' && env.COVERITY_SCAN_EMAIL != '' }}
       shell: bash
       run: echo "${{ github.workspace }}/cov-analysis-win64/bin" >> $GITHUB_PATH
+
     - name: Download support files
+      if: ${{ env.COVERITY_SCAN_TOKEN != '' && env.COVERITY_SCAN_EMAIL != '' }}
       shell: cmd
       run: |
         curl -L ${{ env.WDK_URL }} -o wdk-redist.msi
@@ -51,14 +64,22 @@ jobs:
         del *.7z
         move libusb-win32* libusb0
         move libusbK* libusbk
+
     - name: Add MSBuild to PATH
-      uses: microsoft/setup-msbuild@v2
+      if: ${{ env.COVERITY_SCAN_TOKEN != '' && env.COVERITY_SCAN_EMAIL != '' }}
+      uses: microsoft/setup-msbuild@v3
+      with:
+        vs-version: '[17.0,18.0)'
+
     - name: Build with Coverity
+      if: ${{ env.COVERITY_SCAN_TOKEN != '' && env.COVERITY_SCAN_EMAIL != '' }}
       shell: cmd
       run: |
         cov-configure --msvc
         cov-build.exe --dir cov-int msbuild ${{ env.SOLUTION_FILE_PATH }} /m /p:Configuration=Release,Platform=x64,BuildMacros=${{ env.BUILD_MACROS }}
+
     - name: Upload Coverity build for analysis
+      if: ${{ env.COVERITY_SCAN_TOKEN != '' && env.COVERITY_SCAN_EMAIL != '' }}
       run: |
         7z a -r cov-int.zip cov-int
-        curl --form email=${{ env.EMAIL }} --form token=${{ secrets.COVERITY_SCAN_TOKEN }} --form file=@cov-int.zip --form version="${{ env.GITHUB_SHA }}" --form description="libwdi" https://scan.coverity.com/builds?project=pbatard%2Flibwdi
+        curl.exe --fail --show-error --location --form email="${{ env.COVERITY_SCAN_EMAIL }}" --form token="${{ env.COVERITY_SCAN_TOKEN }}" --form file=@cov-int.zip --form version="${{ github.sha }}" --form description="libwdi" "https://scan.coverity.com/builds?project=${{ env.COVERITY_SCAN_PROJECT }}"
