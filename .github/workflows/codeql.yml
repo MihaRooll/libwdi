@@ -31,14 +31,14 @@ env:
 
 jobs:
   CodeQL-Build:
-    runs-on: windows-latest
+    runs-on: windows-2022
 
     permissions:
       security-events: write
 
     steps:
     - name: Checkout repository
-      uses: actions/checkout@v4
+      uses: actions/checkout@v6
       with:
         fetch-depth: 0
         submodules: recursive
@@ -58,16 +58,18 @@ jobs:
         move libusbK* libusbk
 
     - name: Initialize CodeQL
-      uses: github/codeql-action/init@v3
+      uses: github/codeql-action/init@v4
       with:
         languages: cpp
 
     - name: Add MSBuild to PATH
-      uses: microsoft/setup-msbuild@v2
+      uses: microsoft/setup-msbuild@v3
+      with:
+        vs-version: '[17.0,18.0)'
 
     - name: Build
       shell: cmd
       run: msbuild ${{ env.SOLUTION_FILE_PATH }} /m /p:Configuration=${{ env.BUILD_CONFIGURATION}},Platform=${{ env.TARGET_PLATFORM }},BuildMacros=${{ env.BUILD_MACROS }}
 
     - name: Perform CodeQL Analysis
-      uses: github/codeql-action/analyze@v3
+      uses: github/codeql-action/analyze@v4
